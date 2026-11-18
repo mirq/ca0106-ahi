@@ -30,6 +30,9 @@ Not included in the archive, install these first:
     `GRANTDIRECTACCESS=Yes`.
 * The card needs 48 KB of PCI DMA memory.
 
+Both openpci.library implementations are provided, unmodified, in
+[`third-party/openpci/`](third-party/openpci/).
+
 ## Files
 
 Release archive (`ca0106-<version>.lha`, drawer `CA0106/`):
