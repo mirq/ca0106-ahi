@@ -16,6 +16,20 @@ Status:
 | 5.1 surround, S/PDIF | not yet |
 | new openpci.library (3.x / 40.x, Thomas Richter) | compiled in, selected at run time, **untested** |
 
+## Requirements
+
+Not included in the archive, install these first:
+
+* **68020+ CPU** (built for 68020–68060, tuned for 68060), AmigaOS 3.x.
+* **AHI 4.x** (`ahi.device`, Prefs/AHI, `AddAudioModes`). Tested with 4.18.
+* **A PCI bridge with `openpci.library`** in `LIBS:`:
+  * OpenPCI 2.x (tested 2.1) — a Prometheus also needs a DMA area, which
+    Prometheus.card reserves in the graphics card's VRAM (`DMASIZE` tooltype)
+    or `prometheus.library` v2+ provides; or
+  * openpci.library 3.x / 40.x — supported, but untested; P96 needs
+    `GRANTDIRECTACCESS=Yes`.
+* The card needs 48 KB of PCI DMA memory.
+
 ## Files
 
 Release archive (`ca0106-<version>.lha`, drawer `CA0106/`):
