@@ -1,0 +1,60 @@
+Short:        AHI driver for SB Audigy SE (CA0106)
+Author:       Mirq
+Uploader:     mirziom@gmail.com (Mirq)
+Type:         driver/audio
+Version:      4.1
+Architecture: m68k-amigaos >= 3.0.0
+Requires:     driver/audio/ahiusr_4.18.lha, driver/other/openpci68k.lha
+Distribution: Aminet
+
+ca0106.audio is an AHI v4 sub-driver for PCI sound cards with the Creative
+CA0106 chip, such as the Sound Blaster Audigy SE (SB0570), on classic
+Amigas with a PCI bridge driven by openpci.library.
+
+Features
+--------
+- Stereo playback at 48 and 96 kHz, 16-bit and HiFi (24-bit) modes
+- Full-duplex 16-bit stereo recording from Line, Mic, Aux or CD
+- Hardware monitor: the Aux input goes straight to the output, so Paula
+  sound can be played through the card's speakers with no CPU load
+- cactl: shell mixer control (input, gain, monitor, output volume)
+- Test tools: caprobe, catone, ahitest, ahistream, capci
+
+Audio modes: $00CA0001-$00CA0004 (16 bit stereo/stereo++,
+HiFi 24 bit stereo/stereo++). The $00CA mode ID is provisional.
+
+Requirements
+------------
+- 68020 or better (tuned for 68060), AmigaOS 3.x, AHI 4.x
+- openpci.library: OpenPCI 2.1 (tested), or openpci.library 3.x/40.x by
+  Thomas Richter (supported but untested; P96 3.5+ with
+  GRANTDIRECTACCESS=Yes for DMA memory)
+- 48 KB of PCI DMA memory (on a Prometheus: the Prometheus.card DMA area
+  in graphics card memory, DMASIZE tooltype)
+
+Tested on an A4000/68060 with Prometheus FireStorm, Radeon 9200,
+OpenPCI 2.1 and AHI 4.18.
+
+Installation
+------------
+Unpack the archive, open a shell in the CA0106 drawer and run
+
+  execute Install-CA0106
+
+then pick a "CA0106:" mode in Prefs/AHI (48000 Hz recommended).
+To hear Paula through the card, connect the Amiga audio output to the
+card's Aux input and add to S:User-Startup:
+
+  cactl INPUT=AUX MONITOR=0
+
+Known limitations
+-----------------
+- 44.1 kHz is not offered: the CA0106 analog DAC path does not support it
+- 5.1 surround and S/PDIF output are not implemented yet
+- A guru when opening the AHI mode requester was reported once and has
+  not been reproduced
+
+Source code and issue tracker: https://github.com/mirq/ca0106-ahi
+
+Licence: GPL-2.0-or-later. Based on the Linux ALSA snd-ca0106 driver and
+the 4Front OSS oss_audigyls driver.
