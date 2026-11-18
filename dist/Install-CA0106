@@ -1,0 +1,20 @@
+; Install-CA0106 - install the Audigy SE (CA0106) AHI driver
+; Run from the CA0106 drawer of the release archive.
+.key DUMMY
+.bra {
+.ket }
+
+FailAt 21
+If NOT EXISTS Devs/AHI/ca0106.audio
+  Echo "Run Install-CA0106 from the CA0106 drawer."
+  Quit 10
+EndIf
+
+Copy Devs/AHI/ca0106.audio DEVS:AHI/ CLONE
+Copy Devs/AudioModes/CA0106 DEVS:AudioModes/ CLONE
+Copy C/cactl C: CLONE
+AddAudioModes DEVS:AudioModes/CA0106
+
+Echo "Installed. Select a CA0106 mode in Prefs/AHI."
+Echo "For Paula through the Aux input add to S:User-Startup:"
+Echo "  cactl INPUT=AUX MONITOR=0"
