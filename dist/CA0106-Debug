@@ -1,0 +1,67 @@
+; CA0106-Debug - collect a diagnostic log for the ca0106.audio driver
+; Run from the CA0106 drawer of the release archive:
+;   execute CA0106-Debug
+; Quit every program that uses AHI first (players, Prefs/AHI).
+; The log is written to RAM:CA0106-Debug.txt; send that file.
+.key DUMMY
+.bra {
+.ket }
+
+FailAt 21
+If NOT EXISTS Tools/caprobe
+  Echo "Run CA0106-Debug from the CA0106 drawer."
+  Quit 10
+EndIf
+
+Echo >RAM:CA0106-Debug.txt "=== CA0106-Debug"
+Date >>RAM:CA0106-Debug.txt
+
+Echo "Collecting system information..."
+Echo >>RAM:CA0106-Debug.txt "*N=== versions"
+Version >>RAM:CA0106-Debug.txt FULL
+Version >>RAM:CA0106-Debug.txt DEVS:AHI/ca0106.audio FULL
+Version >>RAM:CA0106-Debug.txt DEVS:ahi.device FULL
+Version >>RAM:CA0106-Debug.txt openpci.library FULL
+Version >>RAM:CA0106-Debug.txt prometheus.library FULL
+Version >>RAM:CA0106-Debug.txt powerpc.library FULL
+Version >>RAM:CA0106-Debug.txt Tools/caprobe
+Echo >>RAM:CA0106-Debug.txt "*N=== memory"
+Avail >>RAM:CA0106-Debug.txt
+Echo >>RAM:CA0106-Debug.txt "*N=== expansion boards"
+If EXISTS SYS:Tools/ShowConfig
+  SYS:Tools/ShowConfig >>RAM:CA0106-Debug.txt
+EndIf
+Echo >>RAM:CA0106-Debug.txt "*N=== PCI scan (PrmScan, Prometheus only)"
+Which >NIL: PrmScan
+If NOT WARN
+  PrmScan >>RAM:CA0106-Debug.txt
+Else
+  Echo >>RAM:CA0106-Debug.txt "PrmScan not found"
+EndIf
+Echo >>RAM:CA0106-Debug.txt "*N=== capci (PCI config of the CA0106)"
+Tools/capci >>RAM:CA0106-Debug.txt
+
+Echo "Reading the card state as found..."
+Echo >>RAM:CA0106-Debug.txt "*N=== cactl STATUS (state as found)"
+C/cactl >>RAM:CA0106-Debug.txt STATUS
+Echo >>RAM:CA0106-Debug.txt "*N=== caprobe NOINIT (no chip reset)"
+Tools/caprobe >>RAM:CA0106-Debug.txt NOINIT
+
+Echo "Testing playback through AHI (you may hear a short tone)..."
+Echo >>RAM:CA0106-Debug.txt "*N=== ahitest 16 bit 48 kHz, state as found"
+Tools/ahitest >>RAM:CA0106-Debug.txt MODE=$00CA0002 SECS=3 VOL=20 LOOP
+
+Echo "Running the full hardware test..."
+Echo >>RAM:CA0106-Debug.txt "*N=== caprobe (full init, DMA, IRQ)"
+Tools/caprobe >>RAM:CA0106-Debug.txt
+Echo >>RAM:CA0106-Debug.txt "*N=== cactl STATUS (after init)"
+C/cactl >>RAM:CA0106-Debug.txt STATUS
+
+Echo "Testing playback through AHI again..."
+Echo >>RAM:CA0106-Debug.txt "*N=== ahitest 16 bit 48 kHz, after init"
+Tools/ahitest >>RAM:CA0106-Debug.txt MODE=$00CA0002 SECS=3 VOL=20 LOOP
+Echo >>RAM:CA0106-Debug.txt "*N=== ahitest HiFi 24 bit 96 kHz"
+Tools/ahitest >>RAM:CA0106-Debug.txt MODE=$00CA0004 SECS=3 VOL=20 LOOP MIXFREQ=96000
+
+Echo >>RAM:CA0106-Debug.txt "*N=== end"
+Echo "Done. Please send RAM:CA0106-Debug.txt"

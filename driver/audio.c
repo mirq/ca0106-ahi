@@ -305,7 +305,8 @@ ULONG drv_AllocAudio(struct TagItem *tags, struct AHIAudioCtrlDrv *ac)
     if (!ca_chip_is_running(&d->hw))
     {
         d->hw.input = CA_INPUT_AUX;
-        ca_chip_init(&d->hw);
+        if (ca_chip_init(&d->hw))
+            goto fail;      /* codecs did not answer: report it to AHI */
     }
     else if (!ca_load_state(&d->hw))
     {

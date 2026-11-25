@@ -403,6 +403,9 @@ BOOL ca_i2c_write(struct CAHw *hw, UBYTE reg, UWORD value)
             if (!(status & I2C_A_ADC_START))
                 break;
         }
+        /* still busy after the poll: not a success, try again */
+        if (status & I2C_A_ADC_START)
+            continue;
         if (!(status & I2C_A_ADC_ABORT))
             return TRUE;
     }
@@ -543,6 +546,12 @@ const char *ca_chip_init(struct CAHw *hw)
         err = "WM8768 DAC SPI write timed out";
 
     ca_set_monitor(hw, mon);
+
+    /* HCFG_AUDIOENABLE is what ca_chip_is_running() trusts; drop it on a
+     * failed codec setup so the next open runs the full init again
+     * instead of skipping it and leaving the card silent. */
+    if (err)
+        ca_io_modify(hw, CA0106_HCFG, HCFG_AUDIOENABLE, 0);
 
     if (hw->irq_added)
     {

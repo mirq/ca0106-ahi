@@ -18,9 +18,9 @@
 
 #define LIB_NAME        "ca0106.audio"
 #define LIB_VERSION     4
-#define LIB_REVISION    1
-#define LIB_DATE        "18.11.2026"
-#define LIB_IDSTRING    "ca0106.audio 4.1 (" LIB_DATE ") Audigy SE (CA0106) via openpci"
+#define LIB_REVISION    2
+#define LIB_DATE        "25.11.2026"
+#define LIB_IDSTRING    "ca0106.audio 4.2 (" LIB_DATE ") Audigy SE (CA0106) via openpci"
 
 struct CABase
 {

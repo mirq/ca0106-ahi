@@ -70,14 +70,14 @@ $(MODES): driver/modefile.s | $(B)
 dist: lha
 
 # Amiga release archive: CA0106/ drawer with driver, mode file, tools, docs
-VERSION ?= 4.1
+VERSION ?= 4.2
 lha: all
 	rm -rf $(B)/lha && mkdir -p $(B)/lha/CA0106/Devs/AHI $(B)/lha/CA0106/Devs/AudioModes $(B)/lha/CA0106/C $(B)/lha/CA0106/Tools
 	cp $(DRIVER) $(B)/lha/CA0106/Devs/AHI/
 	cp $(MODES) $(B)/lha/CA0106/Devs/AudioModes/
 	cp $(B)/cactl $(B)/lha/CA0106/C/
 	cp $(B)/caprobe $(B)/catone $(B)/capci $(B)/ahitest $(B)/ahistream $(B)/lha/CA0106/Tools/
-	cp dist/Install-CA0106 README.md LICENSE $(B)/lha/CA0106/
+	cp dist/Install-CA0106 dist/CA0106-Debug dist/ca0106.readme README.md LICENSE $(B)/lha/CA0106/
 	rm -f $(B)/ca0106-$(VERSION).lha
 	cd $(B)/lha && lha -ao5q ../ca0106-$(VERSION).lha CA0106
 

@@ -2,7 +2,7 @@ Short:        AHI driver for SB Audigy SE (CA0106)
 Author:       Mirq
 Uploader:     mirziom@gmail.com (Mirq)
 Type:         driver/audio
-Version:      4.1
+Version:      4.2
 Architecture: m68k-amigaos >= 3.0.0
 Requires:     driver/audio/ahiusr_4.18.lha, driver/other/openpci68k.lha
 Distribution: Aminet
@@ -53,6 +53,26 @@ Known limitations
 - 5.1 surround and S/PDIF output are not implemented yet
 - A guru when opening the AHI mode requester was reported once and has
   not been reproduced
+
+Reporting problems
+------------------
+Quit all AHI programs, open a shell in the CA0106 drawer and run
+
+  execute CA0106-Debug
+
+then send RAM:CA0106-Debug.txt together with a description of the
+problem (Guru number, which program, cold boot or warm reset).
+
+History
+-------
+4.2 (25.11.2026)
+- If the codecs do not answer during chip setup, AllocAudio now fails
+  cleanly instead of running a silent card, and the next open runs the
+  full setup again
+- An I2C write that never completes is no longer reported as success
+- New CA0106-Debug script that collects a diagnostic log
+4.1 (18.11.2026)
+- First release
 
 Source code and issue tracker: https://github.com/mirq/ca0106-ahi
 
