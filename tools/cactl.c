@@ -35,7 +35,7 @@
 #include "ca0106_regs.h"
 #include "ca0106_hw.h"
 
-static const char vers[] = "$VER: cactl 0.2 (18.11.2026)";
+static const char vers[] __attribute__((used)) = "$VER: cactl 0.2 (18.11.2026)";
 
 static struct CAHw hw;
 

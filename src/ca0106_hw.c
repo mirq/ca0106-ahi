@@ -24,6 +24,14 @@
 #define MEM_NONCACHEABLE    0x2
 #endif
 
+/* caprobe TRACE: report each chip setup step; nothing in the driver */
+#ifdef CA_DRIVER
+#define CA_TRACE(hw, stage, arg)    ((void)0)
+#else
+#define CA_TRACE(hw, stage, arg) \
+    do { if ((hw)->trace) (hw)->trace((hw), (stage), (arg)); } while (0)
+#endif
+
 struct Library *OpenPciBase;
 struct Library *PrometheusBase;
 
@@ -192,18 +200,80 @@ const char *ca_dma_kind_name(UBYTE kind)
     }
 }
 
-static BOOL ca_dma_finish(struct CAHw *hw, APTR raw, ULONG rawsize, ULONG need, UBYTE kind)
+static ULONG ca_dma_bus_addr(struct CAHw *hw, UBYTE kind, ULONG cpu)
+{
+    if (kind == CA_DMA_PROMETHEUS)
+        return (ULONG)Prm_GetPhysicalAddress((APTR)cpu);
+    return (ULONG)pci_logic_to_physic_addr((APTR)cpu, hw->dev);
+}
+
+static const char *dma_err;     /* reason of the last rejected block */
+
+/*
+ * Self-checks of a candidate block, so that unusable DMA memory makes
+ * AllocAudio fail instead of playing silence:
+ *  - every page must sit at dma_pci + offset on the PCI bus (the card
+ *    reads the block linearly from one start address);
+ *  - a pattern written by the CPU and pushed out of the data cache must
+ *    read back, i.e. the CPU really reaches that memory (A1200 Mediator:
+ *    through the MMU-switched PCI window).
+ */
+static BOOL ca_dma_check(struct CAHw *hw, ULONG cpu, ULONG phys, ULONG need, UBYTE kind)
+{
+    volatile ULONG *p = (volatile ULONG *)cpu;
+    ULONG off, n = need / 4, i, v;
+
+    hw->dma_info |= CA_DMAI_CHECKED;
+    for (off = CA_DMA_PAGE; off <= need; off += CA_DMA_PAGE)
+    {
+        ULONG o = off < need ? off : need - 4;
+        v = ca_dma_bus_addr(hw, kind, cpu + o);
+        if (v != phys + o)
+        {
+            hw->dma_info |= CA_DMAI_PAGES_BAD;
+            hw->dma_badoff = o;
+            hw->dma_badval = v;
+            dma_err = "DMA memory is not contiguous on the PCI bus";
+            return FALSE;
+        }
+    }
+
+    for (i = 0; i < n; i++)
+        p[i] = (i * 0x9e3779b1UL) ^ 0x5aa5c33cUL;
+    CacheClearE((APTR)cpu, need, CACRF_ClearD);
+    for (i = 0; i < n; i++)
+    {
+        v = p[i];
+        if (v != ((i * 0x9e3779b1UL) ^ 0x5aa5c33cUL))
+        {
+            hw->dma_info |= CA_DMAI_RW_BAD;
+            hw->dma_badoff = i * 4;
+            hw->dma_badval = v;
+            dma_err = "DMA memory does not keep data written by the CPU";
+            return FALSE;
+        }
+    }
+    return TRUE;
+}
+
+static BOOL ca_dma_finish(struct CAHw *hw, APTR raw, ULONG rawsize, ULONG need, UBYTE kind,
+                          ULONG flags, ULONG info)
 {
     ULONG cpu = ((ULONG)raw + CA_DMA_PAGE - 1) & ~(CA_DMA_PAGE - 1);
     ULONG phys;
 
     if (cpu + need > (ULONG)raw + rawsize)
         return FALSE;
-    if (kind == CA_DMA_PROMETHEUS)
-        phys = (ULONG)Prm_GetPhysicalAddress((APTR)cpu);
-    else
-        phys = (ULONG)pci_logic_to_physic_addr((APTR)cpu, hw->dev);
+    phys = ca_dma_bus_addr(hw, kind, cpu);
     if (!phys)
+    {
+        dma_err = "DMA memory has no PCI bus address";
+        return FALSE;
+    }
+
+    hw->dma_info = info;
+    hw->dma_badoff = hw->dma_badval = 0;
+    if (!(flags & CA_DMAF_NOCHECK) && !ca_dma_check(hw, cpu, phys, need, kind))
         return FALSE;
 
     hw->dma_raw = raw;
@@ -239,19 +309,26 @@ const char *ca_dma_alloc(struct CAHw *hw, ULONG size, ULONG flags)
 
     if (hw->dma_kind != CA_DMA_NONE)
         return "DMA memory already allocated";
+    dma_err = NULL;
+    hw->dma_info = 0;
 
     if (!(flags & CA_DMAF_ONLY_PROMETHEUS))
     {
         if (hw->libver >= 3)
         {
             /* new openpci: no alignment guarantee, so over-allocate */
+            ULONG info = CA_DMAI_NONCACHE;
+
             raw = AllocateDMAMemoryForBoard(hw->dev, need + CA_DMA_PAGE,
                                             MEM_PCI | MEM_NONCACHEABLE);
             if (!raw)
+            {
+                info = 0;
                 raw = AllocateDMAMemoryForBoard(hw->dev, need + CA_DMA_PAGE, MEM_PCI);
+            }
             if (raw)
             {
-                if (ca_dma_finish(hw, raw, need + CA_DMA_PAGE, need, CA_DMA_OPENPCI3))
+                if (ca_dma_finish(hw, raw, need + CA_DMA_PAGE, need, CA_DMA_OPENPCI3, flags, info))
                     goto done;
                 ReleaseDMAMemoryForBoard(hw->dev, raw, need + CA_DMA_PAGE);
             }
@@ -263,14 +340,14 @@ const char *ca_dma_alloc(struct CAHw *hw, ULONG size, ULONG flags)
             raw = pci_allocdma_mem(need, MEM_PCI);
             if (raw)
             {
-                if (ca_dma_finish(hw, raw, need, need, CA_DMA_OPENPCI2))
+                if (ca_dma_finish(hw, raw, need, need, CA_DMA_OPENPCI2, flags, 0))
                     goto done;
                 pci_freedma_mem(raw, need);
             }
             raw = pci_allocdma_mem(need + CA_DMA_PAGE, MEM_PCI);
             if (raw)
             {
-                if (ca_dma_finish(hw, raw, need + CA_DMA_PAGE, need, CA_DMA_OPENPCI2))
+                if (ca_dma_finish(hw, raw, need + CA_DMA_PAGE, need, CA_DMA_OPENPCI2, flags, 0))
                     goto done;
                 pci_freedma_mem(raw, need + CA_DMA_PAGE);
             }
@@ -288,12 +365,16 @@ const char *ca_dma_alloc(struct CAHw *hw, ULONG size, ULONG flags)
             raw = Prm_AllocDMABuffer(need);
             if (raw)
             {
-                if (ca_dma_finish(hw, raw, need, need, CA_DMA_PROMETHEUS))
+                if (ca_dma_finish(hw, raw, need, need, CA_DMA_PROMETHEUS, flags, 0))
                     goto done;
                 Prm_FreeDMABuffer(raw, need);
             }
         }
     }
+    if (dma_err)
+        return dma_err;
+    if (hw->libver >= 3)
+        return "no PCI DMA memory available (P96 GRANTDIRECTACCESS=Yes?)";
     return "no PCI DMA memory available (check Prometheus DMASIZE tooltype)";
 
 done:
@@ -378,10 +459,15 @@ BOOL ca_spi_write(struct CAHw *hw, UWORD data)
         if (!(ca_ptr_read(hw, SPI, 0) & 0x10000UL))
             break;
     }
+    hw->spi_polls = n;
     if (n == 2000)
+    {
+        CA_TRACE(hw, "SPI write timed out", data);
         return FALSE;
+    }
     ca_ptr_write(hw, SPI, 0, reset | data);
     (void)ca_ptr_read(hw, SPI, 0);
+    CA_TRACE(hw, "SPI write", data);
     return TRUE;
 }
 
@@ -403,12 +489,19 @@ BOOL ca_i2c_write(struct CAHw *hw, UBYTE reg, UWORD value)
             if (!(status & I2C_A_ADC_START))
                 break;
         }
+        hw->i2c_polls = timeout;
+        hw->i2c_status = status;
+        hw->i2c_tries = retry + 1;
         /* still busy after the poll: not a success, try again */
         if (status & I2C_A_ADC_START)
             continue;
         if (!(status & I2C_A_ADC_ABORT))
+        {
+            CA_TRACE(hw, "I2C write", ((ULONG)reg << 16) | value);
             return TRUE;
+        }
     }
+    CA_TRACE(hw, "I2C write FAILED", ((ULONG)reg << 16) | value);
     return FALSE;
 }
 
@@ -474,15 +567,18 @@ const char *ca_chip_init(struct CAHw *hw)
     if (ca_chip_is_running(hw))
         mon = ca_get_monitor(hw);
 
+    CA_TRACE(hw, "init start", 0);
     hw->inte &= ~INTE_AI;
     ca_outl(hw, CA0106_INTE, hw->inte);
     ca_ptr_write(hw, BASIC_INTERRUPT, 0, 0);
     ca_ptr_write(hw, EXTENDED_INT_MASK, 0, 0);
+    CA_TRACE(hw, "interrupts off", 0);
 
     ca_ptr_write(hw, SPCS1, 0, SPCS_DEFAULT);
     ca_ptr_write(hw, SPCS0, 0, SPCS_DEFAULT);
     ca_ptr_write(hw, SPCS2, 0, SPCS_DEFAULT);
     ca_ptr_write(hw, SPCS3, 0, SPCS_DEFAULT);
+    CA_TRACE(hw, "S/PDIF status", 0);
 
     ca_ptr_write(hw, PLAYBACK_MUTE, 0, 0x00fc0000UL);
     ca_ptr_write(hw, CAPTURE_MUTE, 0, 0x00fc0000UL);
@@ -490,6 +586,7 @@ const char *ca_chip_init(struct CAHw *hw)
     /* mute the (absent) AC97 record gain */
     ca_outb(hw, CA0106_AC97ADDRESS, AC97_REC_GAIN);
     ca_outw(hw, CA0106_AC97DATA, 0x8000);
+    CA_TRACE(hw, "mutes, AC97 rec gain", 0);
 
     /* analog outputs */
     ca_ptr_write(hw, SPDIF_SELECT1, 0, 0xf);
@@ -506,6 +603,7 @@ const char *ca_chip_init(struct CAHw *hw)
     ca_ptr_write(hw, PLAYBACK_ROUTING2, 0, 0x76767676UL);
     ca_ptr_write(hw, CAPTURE_ROUTING1, 0, 0x32765410UL);
     ca_ptr_write(hw, CAPTURE_ROUTING2, 0, 0x76767676UL);
+    CA_TRACE(hw, "S/PDIF select, capture control, routing", 0);
 
     for (ch = 0; ch < 4; ch++)
     {
@@ -517,12 +615,16 @@ const char *ca_chip_init(struct CAHw *hw)
 
     /* record source: I2S input (WM8775) on all capture channels */
     ca_ptr_write(hw, CAPTURE_SOURCE, 0, 0x333300e4UL);
+    CA_TRACE(hw, "volumes, capture source", 0);
 
     /* GPIO for SB0410/SB0413/SB0570: analog jack mode */
     ca_outl(hw, CA0106_GPIO, 0);
+    CA_TRACE(hw, "GPIO = 0", 0);
     ca_outl(hw, CA0106_GPIO, 0x005f5301UL);   /* GPO0|GPO1|GPO4|GPO6 */
+    CA_TRACE(hw, "GPIO = $005f5301", 0);
 
     ca_outl(hw, CA0106_HCFG, HCFG_AC97 | HCFG_AUDIOENABLE);
+    CA_TRACE(hw, "HCFG = AC97|AUDIOENABLE", 0);
 
     for (n = 0; n < sizeof(i2c_adc_init) / sizeof(i2c_adc_init[0]); n++)
         if (!ca_i2c_write(hw, i2c_adc_init[n][0], i2c_adc_init[n][1]) && !err)
@@ -552,6 +654,7 @@ const char *ca_chip_init(struct CAHw *hw)
      * instead of skipping it and leaving the card silent. */
     if (err)
         ca_io_modify(hw, CA0106_HCFG, HCFG_AUDIOENABLE, 0);
+    CA_TRACE(hw, err ? "init end (FAILED)" : "init end", 0);
 
     if (hw->irq_added)
     {

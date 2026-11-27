@@ -19,6 +19,7 @@
 
 struct pci_dev;
 struct Interrupt;
+struct TagItem;
 
 #define pci_bus() \
 	LP0(0x1e, UWORD, pci_bus, , OPENPCI_BASE_NAME)
@@ -68,6 +69,9 @@ struct Interrupt;
 #define pci_logic_to_physic_addr(addr, pcidev) \
 	LP2(0xae, APTR, pci_logic_to_physic_addr, APTR, addr, a0, struct pci_dev *, pcidev, a1, , OPENPCI_BASE_NAME)
 
+#define pci_physic_to_logic_addr(addr, pcidev) \
+	LP2(0xb4, APTR, pci_physic_to_logic_addr, APTR, addr, a0, struct pci_dev *, pcidev, a1, , OPENPCI_BASE_NAME)
+
 #define pci_obtain_card(pcidev) \
 	LP1(0xba, BOOL, pci_obtain_card, struct pci_dev *, pcidev, a0, , OPENPCI_BASE_NAME)
 
@@ -75,6 +79,9 @@ struct Interrupt;
 	LP1NR(0xc0, pci_release_card, struct pci_dev *, pcidev, a0, , OPENPCI_BASE_NAME)
 
 /* openpci.library v3+ only */
+#define GetBoardAttrsA(pcidev, tags) \
+	LP2(0xd2, ULONG, GetBoardAttrsA, struct pci_dev *, pcidev, a0, struct TagItem *, tags, a1, , OPENPCI_BASE_NAME)
+
 #define AllocateDMAMemoryForBoard(pcidev, size, flags) \
 	LP3(0xde, APTR, AllocateDMAMemoryForBoard, struct pci_dev *, pcidev, a0, ULONG, size, d0, ULONG, flags, d1, , OPENPCI_BASE_NAME)
 

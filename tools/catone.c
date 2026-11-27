@@ -2,11 +2,17 @@
  * catone - play a sine tone on the CA0106 front output.
  *
  * catone [FREQ=1000] [RATE=48000] [SECS=3] [VOL=50] [LEFT] [RIGHT] [S32]
- *        [VERIFY] [QUIET]
+ *        [VERIFY] [QUIET] [GPIO=hex]
  *
  * VERIFY records the chip's own I2S mixer output ("what you hear") while
  * the tone plays and checks frequency, channel separation and continuity,
- * so the data path can be validated without listening.
+ * so the data path can be validated without listening.  It ends with
+ * "VERIFY: PASS" (rc 0) or "VERIFY: FAIL" (rc 5).
+ *
+ * GPIO=hex writes the CA0106 GPIO register after the init, to try other
+ * analog output routings on boards that are not an SB0570 (the Linux
+ * driver uses $005f5301 for SB0410/SB0413/SB0570 and $005f03a3 for
+ * the Audigy LS).
  *
  * GPL-2.0-or-later.
  */
@@ -16,6 +22,7 @@
 #include <proto/dos.h>
 #include <stdio.h>
 #include <math.h>
+#include <stdlib.h>
 
 #include <libraries/openpci.h>
 #include <inline/openpci.h>
@@ -23,7 +30,7 @@
 #include "ca0106_regs.h"
 #include "ca0106_hw.h"
 
-static const char vers[] = "$VER: catone 0.2 (18.11.2026)";
+static const char vers[] __attribute__((used)) = "$VER: catone 0.3 (27.11.2026)";
 
 static struct CAHw hw;
 
@@ -42,13 +49,14 @@ static UBYTE rate_code(ULONG rate)
     }
 }
 
-static void analyse(ULONG rate, ULONG freq, BOOL left, BOOL right, LONG amp, ULONG capptr)
+static BOOL analyse(ULONG rate, ULONG freq, BOOL left, BOOL right, LONG amp, ULONG capptr)
 {
     volatile ULONG *c = (volatile ULONG *)(hw.dma_cpu + CAP_OFF);
     ULONG frames = CAP_BYTES / 4, i, ch, start = (capptr / 4) % frames;
     LONG prev[2] = { 0, 0 }, maxabs[2] = { 0, 0 }, maxstep[2] = { 0, 0 };
     ULONG zc[2] = { 0, 0 }, glitch[2] = { 0, 0 };
     LONG expstep = (LONG)(2.0 * 3.14159265 * freq / rate * amp * 1.3) + 64;
+    BOOL ok = TRUE;
 
     CacheClearE((APTR)c, CAP_BYTES, CACRF_ClearD);
     /* oldest data first; skip a few frames on both ends of the seam */
@@ -79,25 +87,31 @@ static void analyse(ULONG rate, ULONG freq, BOOL left, BOOL right, LONG amp, ULO
     {
         BOOL want = ch == 0 ? left : right;
         ULONG estf = zc[ch] * rate / (frames - 16);
+        BOOL good = want ? (maxabs[ch] > amp / 4 && glitch[ch] == 0 &&
+                            estf > freq * 9 / 10 && estf < freq * 11 / 10)
+                         : maxabs[ch] < 256;
+        if (!good)
+            ok = FALSE;
         printf("  %s: peak %5ld  est. freq %5lu Hz  max step %5ld (limit %ld) glitches %lu  %s\n",
                ch ? "right" : "left ", maxabs[ch], estf, maxstep[ch], expstep, glitch[ch],
                want ? ((maxabs[ch] > amp / 4 && glitch[ch] == 0 &&
                         estf > freq * 9 / 10 && estf < freq * 11 / 10) ? "OK" : "BAD")
                     : (maxabs[ch] < 256 ? "OK (silent)" : "BAD (should be silent)"));
     }
+    return ok;
 }
 
 int main(void)
 {
-    LONG *args[9] = { 0 };
+    LONG *args[10] = { 0 };
     struct RDArgs *rda;
     const char *err;
     ULONG freq = 1000, rate = 48000, secs = 3, vol = 50;
-    BOOL left, right, s32, verify, quiet;
+    BOOL left, right, s32, verify, quiet, verify_ok = TRUE;
     ULONG frames, bytes, cycles, i, fsize;
     LONG amp;
 
-    rda = ReadArgs("FREQ/N,RATE/N,SECS/N,VOL/N,LEFT/S,RIGHT/S,S32/S,VERIFY/S,QUIET/S",
+    rda = ReadArgs("FREQ/N,RATE/N,SECS/N,VOL/N,LEFT/S,RIGHT/S,S32/S,VERIFY/S,QUIET/S,GPIO/K",
                    (LONG *)args, NULL);
     if (!rda)
     {
@@ -144,6 +158,19 @@ int main(void)
         return RETURN_FAIL;
     }
 
+    if (args[9])
+    {
+        ULONG g = strtoul((char *)args[9], NULL, 16);
+        ca_outl(&hw, CA0106_GPIO, g);
+        printf("catone: GPIO set to $%08lx (reads $%08lx)\n", g, ca_inl(&hw, CA0106_GPIO));
+    }
+    if (!quiet)
+        printf("catone: %s (subsystem $%08lx), DMA %s cpu=$%08lx pci=$%08lx%s\n",
+               ca_model_name(hw.serial), hw.serial, ca_dma_kind_name(hw.dma_kind),
+               (ULONG)hw.dma_cpu, hw.dma_pci,
+               hw.dma_kind == CA_DMA_OPENPCI3 && !(hw.dma_info & CA_DMAI_NONCACHE) ?
+                   " (cacheable)" : "");
+
     for (i = 0; i < frames; i++)
     {
         double ph = 2.0 * 3.14159265358979 * (double)cycles * (double)i / (double)frames;
@@ -188,7 +215,9 @@ int main(void)
         ca_ptr_write(&hw, CAPTURE_SOURCE, 0, 0x333300e4UL);
         printf("verify (I2S mixer loopback, playback pointer $%04lx):\n",
                ca_play_pointer(&hw));
-        analyse(rate == 44100 ? 48000 : rate, freq, left, right, amp, i);
+        verify_ok = analyse(rate == 44100 ? 48000 : rate, freq, left, right, amp, i);
+        printf("VERIFY: %s\n", verify_ok ? "PASS" : "FAIL");
+        fflush(stdout);
     }
 
     for (i = 0; i < secs * 10; i++)
@@ -202,5 +231,5 @@ int main(void)
     ca_close(&hw);
     FreeArgs(rda);
     (void)vers;
-    return RETURN_OK;
+    return verify_ok ? RETURN_OK : RETURN_WARN;
 }

@@ -21,6 +21,14 @@ struct pci_dev;
 /* ca_dma_alloc() flags: restrict the strategy (0 = automatic) */
 #define CA_DMAF_ONLY_OPENPCI    1
 #define CA_DMAF_ONLY_PROMETHEUS 2
+#define CA_DMAF_NOCHECK         4   /* skip the self-checks (caprobe only) */
+
+/* ca_dma_alloc() results in hw->dma_info */
+#define CA_DMAI_NONCACHE    0x01    /* allocated with MEM_NONCACHEABLE (openpci v3+) */
+#define CA_DMAI_PAGES_BAD   0x02    /* a page is not at dma_pci + offset on the bus */
+#define CA_DMAI_RW_BAD      0x04    /* a pattern written by the CPU did not read back
+                                     * after a cache push (memory not really there) */
+#define CA_DMAI_CHECKED     0x80    /* the checks ran */
 
 /* Inputs of the WM8775 ADC mux as presented to the user */
 #define CA_INPUT_LINE   0
@@ -58,6 +66,9 @@ struct CAHw
     UBYTE              *dma_cpu;        /* 4 KB aligned CPU address */
     ULONG               dma_pci;        /* matching PCI bus address */
     ULONG               dma_size;       /* usable bytes from dma_cpu */
+    ULONG               dma_info;       /* CA_DMAI_xxx, see ca_dma_alloc() */
+    ULONG               dma_badoff;     /* first failing offset of a check */
+    ULONG               dma_badval;     /* what was read/translated there */
 
     /* Interrupt */
     struct Interrupt    irq;
@@ -72,6 +83,13 @@ struct CAHw
     UBYTE               input;          /* CA_INPUT_xxx */
     UBYTE               gain_l, gain_r; /* WM8775 attenuation codes */
     UBYTE               pad1;
+
+    /* Diagnostics (caprobe TRACE).  The hook is compiled out of the driver. */
+    void              (*trace)(struct CAHw *hw, const char *stage, ULONG arg);
+    ULONG               i2c_polls;      /* status reads of the last I2C attempt */
+    ULONG               i2c_status;     /* last I2C_A value read */
+    ULONG               i2c_tries;      /* attempts used by the last I2C write */
+    ULONG               spi_polls;      /* status reads of the last SPI write */
 };
 
 /* ---- PCI / resources ---- */

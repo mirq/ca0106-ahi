@@ -2,7 +2,7 @@ Short:        AHI driver for SB Audigy SE (CA0106)
 Author:       Mirq
 Uploader:     mirziom@gmail.com (Mirq)
 Type:         driver/audio
-Version:      4.2
+Version:      4.3
 Architecture: m68k-amigaos >= 3.0.0
 Requires:     driver/audio/ahiusr_4.18.lha, driver/other/openpci68k.lha
 Distribution: Aminet
@@ -26,14 +26,16 @@ HiFi 24 bit stereo/stereo++). The $00CA mode ID is provisional.
 Requirements
 ------------
 - 68020 or better (tuned for 68060), AmigaOS 3.x, AHI 4.x
-- openpci.library: OpenPCI 2.1 (tested), or openpci.library 3.x/40.x by
-  Thomas Richter (supported but untested; P96 3.5+ with
-  GRANTDIRECTACCESS=Yes for DMA memory)
+- openpci.library: OpenPCI 2.1, or openpci.library 3.x/40.x by
+  Thomas Richter (P96 3.5+ with GRANTDIRECTACCESS=Yes in the graphics
+  card's monitor icon, for DMA memory)
 - 48 KB of PCI DMA memory (on a Prometheus: the Prometheus.card DMA area
   in graphics card memory, DMASIZE tooltype)
 
 Tested on an A4000/68060 with Prometheus FireStorm, Radeon 9200,
-OpenPCI 2.1 and AHI 4.18.
+OpenPCI 2.1 and AHI 4.18. Reported working on an A1200/68060 with
+Mediator PCI 1200 TX, openpci.library 40.16, AmigaOS 3.2.3 and
+GRANTDIRECTACCESS=Yes.
 
 Installation
 ------------
@@ -60,11 +62,25 @@ Quit all AHI programs, open a shell in the CA0106 drawer and run
 
   execute CA0106-Debug
 
+and answer its questions about the tone (speakers on the green jack),
 then send RAM:CA0106-Debug.txt together with a description of the
 problem (Guru number, which program, cold boot or warm reset).
 
 History
 -------
+4.3 (27.11.2026)
+- DMA memory is checked when AHI opens the card: every page must be
+  where the card will look for it on the PCI bus, and data written by
+  the CPU must read back after a cache flush. If not, AllocAudio fails
+  with an error instead of playing silence
+- A1200 Mediator with openpci.library 40.x reported working (P96 needs
+  GRANTDIRECTACCESS=Yes)
+- caprobe 0.3: bridge type, openpci address map, and where the DMA
+  memory is (non-cacheable or not, bus address, Fast/Chip RAM)
+- catone 0.3: VERIFY reports PASS/FAIL; GPIO=hex tries other analog
+  output routings
+- CA0106-Debug: lspci, PCI-Configuration, DMAMemTest, a digital loopback
+  check, and listening tests (asks whether you heard a tone)
 4.2 (25.11.2026)
 - If the codecs do not answer during chip setup, AllocAudio now fails
   cleanly instead of running a silent card, and the next open runs the

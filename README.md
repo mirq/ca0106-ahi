@@ -14,7 +14,8 @@ Status:
 | Hardware monitor (input mixed into output, for Paula via Aux) | working on the chip side; Paula→Aux needs a cable test |
 | 44.1 kHz | not offered: the CA0106 runs it only toward S/PDIF, the analog DAC path produces garbage |
 | 5.1 surround, S/PDIF | not yet |
-| new openpci.library (3.x / 40.x, Thomas Richter) | compiled in, selected at run time, **untested** |
+| new openpci.library (3.x / 40.x, Thomas Richter) | working (reported on an A1200 Mediator with openpci 40.16); P96 needs `GRANTDIRECTACCESS=Yes` |
+| A1200 Mediator PCI 1200 TX (openpci.library 40.x) | working, reported by a user (68060, AmigaOS 3.2.3, Radeon 9200 Pro) with `GRANTDIRECTACCESS=Yes` |
 
 ## Requirements
 
@@ -26,8 +27,9 @@ Not included in the archive, install these first:
   * OpenPCI 2.x (tested 2.1) — a Prometheus also needs a DMA area, which
     Prometheus.card reserves in the graphics card's VRAM (`DMASIZE` tooltype)
     or `prometheus.library` v2+ provides; or
-  * openpci.library 3.x / 40.x — supported, but untested; P96 needs
-    `GRANTDIRECTACCESS=Yes`.
+  * openpci.library 3.x / 40.x (reported working on an A1200 Mediator) —
+    P96 needs `GRANTDIRECTACCESS=Yes` in the graphics card's monitor icon,
+    otherwise there is no DMA memory and the driver fails to open.
 * The card needs 48 KB of PCI DMA memory.
 
 Both openpci.library implementations are provided, unmodified, in

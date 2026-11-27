@@ -29,7 +29,7 @@ static struct CABase *CABase;
 const char LibName[] = LIB_NAME;
 const char LibIdString[] = LIB_IDSTRING;
 static const char VersTag[] __attribute__((used)) =
-    "$VER: " LIB_NAME " 4.2 (" LIB_DATE ") GPL-2.0";
+    "$VER: " LIB_NAME " 4.3 (" LIB_DATE ") GPL-2.0";
 
 /* ---------------------------------------------------------------------- */
 

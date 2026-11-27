@@ -70,7 +70,7 @@ $(MODES): driver/modefile.s | $(B)
 dist: lha
 
 # Amiga release archive: CA0106/ drawer with driver, mode file, tools, docs
-VERSION ?= 4.2
+VERSION ?= 4.3
 lha: all
 	rm -rf $(B)/lha && mkdir -p $(B)/lha/CA0106/Devs/AHI $(B)/lha/CA0106/Devs/AudioModes $(B)/lha/CA0106/C $(B)/lha/CA0106/Tools
 	cp $(DRIVER) $(B)/lha/CA0106/Devs/AHI/

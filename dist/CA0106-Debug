@@ -1,11 +1,15 @@
-; CA0106-Debug - collect a diagnostic log for the ca0106.audio driver
-; Run from the CA0106 drawer of the release archive:
-;   execute CA0106-Debug
-; Quit every program that uses AHI first (players, Prefs/AHI).
-; The log is written to RAM:CA0106-Debug.txt; send that file.
-.key DUMMY
+.key LOG/K
 .bra {
 .ket }
+.def LOG RAM:CA0106-Debug.txt
+; CA0106-Debug - collect a diagnostic log for the ca0106.audio driver
+; Run from the CA0106 drawer of the release archive, after a cold boot:
+;   execute CA0106-Debug
+; or, to keep the log if the machine crashes, write it to a disk:
+;   execute CA0106-Debug LOG=SYS:CA0106-Debug.txt
+; Quit every program that uses AHI first (players, Prefs/AHI).
+; Near the end it plays tones and asks whether you heard them: connect
+; speakers to the green (front) jack and answer y or n.
 
 FailAt 21
 If NOT EXISTS Tools/caprobe
@@ -13,55 +17,136 @@ If NOT EXISTS Tools/caprobe
   Quit 10
 EndIf
 
-Echo >RAM:CA0106-Debug.txt "=== CA0106-Debug"
-Date >>RAM:CA0106-Debug.txt
+Echo >{LOG} "=== CA0106-Debug (3)"
+Date >>{LOG}
 
 Echo "Collecting system information..."
-Echo >>RAM:CA0106-Debug.txt "*N=== versions"
-Version >>RAM:CA0106-Debug.txt FULL
-Version >>RAM:CA0106-Debug.txt DEVS:AHI/ca0106.audio FULL
-Version >>RAM:CA0106-Debug.txt DEVS:ahi.device FULL
-Version >>RAM:CA0106-Debug.txt openpci.library FULL
-Version >>RAM:CA0106-Debug.txt prometheus.library FULL
-Version >>RAM:CA0106-Debug.txt powerpc.library FULL
-Version >>RAM:CA0106-Debug.txt Tools/caprobe
-Echo >>RAM:CA0106-Debug.txt "*N=== memory"
-Avail >>RAM:CA0106-Debug.txt
-Echo >>RAM:CA0106-Debug.txt "*N=== expansion boards"
+Echo >>{LOG} "*N=== versions"
+Version >>{LOG} FULL
+Version >>{LOG} DEVS:AHI/ca0106.audio FULL
+Version >>{LOG} DEVS:ahi.device FULL
+Version >>{LOG} openpci.library FULL
+Version >>{LOG} prometheus.library FULL
+Version >>{LOG} LIBS:68060.library FULL
+Version >>{LOG} LIBS:68040.library FULL
+Version >>{LOG} mmu.library FULL
+Version >>{LOG} powerpc.library FULL
+Version >>{LOG} Picasso96API.library FULL
+Version >>{LOG} Tools/caprobe
+Echo >>{LOG} "*N=== memory"
+Avail >>{LOG}
+Echo >>{LOG} "*N=== expansion boards"
 If EXISTS SYS:Tools/ShowConfig
-  SYS:Tools/ShowConfig >>RAM:CA0106-Debug.txt
+  SYS:Tools/ShowConfig >>{LOG}
 EndIf
-Echo >>RAM:CA0106-Debug.txt "*N=== PCI scan (PrmScan, Prometheus only)"
+Echo >>{LOG} "*N=== MMU map (MuScan)"
+Which >NIL: MuScan
+If NOT WARN
+  MuScan >>{LOG}
+Else
+  If EXISTS SYS:MuTools/MuScan
+    SYS:MuTools/MuScan >>{LOG}
+  Else
+    Echo >>{LOG} "MuScan not found"
+  EndIf
+EndIf
+Echo >>{LOG} "*N=== openpci 40: lspci, PCI-Configuration, DMAMemTest"
+Which >NIL: lspci
+If NOT WARN
+  lspci >>{LOG}
+Else
+  Echo >>{LOG} "lspci not found"
+EndIf
+If EXISTS ENVARC:PCI-Configuration
+  Type >>{LOG} ENVARC:PCI-Configuration
+Else
+  Echo >>{LOG} "no ENVARC:PCI-Configuration"
+EndIf
+Which >NIL: DMAMemTest
+If NOT WARN
+  DMAMemTest >>{LOG}
+  Echo >>{LOG} "(rc=$RC)"
+Else
+  Echo >>{LOG} "DMAMemTest not found"
+EndIf
+Echo >>{LOG} "*N=== PCI scan (PrmScan, Prometheus only)"
 Which >NIL: PrmScan
 If NOT WARN
-  PrmScan >>RAM:CA0106-Debug.txt
+  PrmScan >>{LOG}
 Else
-  Echo >>RAM:CA0106-Debug.txt "PrmScan not found"
+  Echo >>{LOG} "PrmScan not found"
 EndIf
-Echo >>RAM:CA0106-Debug.txt "*N=== capci (PCI config of the CA0106)"
-Tools/capci >>RAM:CA0106-Debug.txt
+Echo >>{LOG} "*N=== capci (PCI config of the CA0106)"
+Tools/capci >>{LOG}
+Echo >>{LOG} "(rc=$RC)"
 
 Echo "Reading the card state as found..."
-Echo >>RAM:CA0106-Debug.txt "*N=== cactl STATUS (state as found)"
-C/cactl >>RAM:CA0106-Debug.txt STATUS
-Echo >>RAM:CA0106-Debug.txt "*N=== caprobe NOINIT (no chip reset)"
-Tools/caprobe >>RAM:CA0106-Debug.txt NOINIT
+Echo >>{LOG} "*N=== cactl STATUS (state as found)"
+C/cactl >>{LOG} STATUS
+Echo >>{LOG} "(rc=$RC)"
+Echo >>{LOG} "*N=== caprobe NOINIT (no chip reset)"
+Tools/caprobe >>{LOG} NOINIT
+Echo >>{LOG} "(rc=$RC)"
 
 Echo "Testing playback through AHI (you may hear a short tone)..."
-Echo >>RAM:CA0106-Debug.txt "*N=== ahitest 16 bit 48 kHz, state as found"
-Tools/ahitest >>RAM:CA0106-Debug.txt MODE=$00CA0002 SECS=3 VOL=20 LOOP
+Echo >>{LOG} "*N=== ahitest 16 bit 48 kHz, state as found"
+Tools/ahitest >>{LOG} MODE=$00CA0002 SECS=3 VOL=20 LOOP
+Echo >>{LOG} "(rc=$RC)"
 
-Echo "Running the full hardware test..."
-Echo >>RAM:CA0106-Debug.txt "*N=== caprobe (full init, DMA, IRQ)"
-Tools/caprobe >>RAM:CA0106-Debug.txt
-Echo >>RAM:CA0106-Debug.txt "*N=== cactl STATUS (after init)"
-C/cactl >>RAM:CA0106-Debug.txt STATUS
+Echo "Running the full hardware test with a setup trace..."
+Echo >>{LOG} "*N=== caprobe TRACE (full init, bus test, DMA, IRQ)"
+Tools/caprobe >>{LOG} TRACE
+Echo >>{LOG} "(rc=$RC)"
+Echo >>{LOG} "*N=== cactl STATUS (after init)"
+C/cactl >>{LOG} STATUS
+Echo >>{LOG} "(rc=$RC)"
 
 Echo "Testing playback through AHI again..."
-Echo >>RAM:CA0106-Debug.txt "*N=== ahitest 16 bit 48 kHz, after init"
-Tools/ahitest >>RAM:CA0106-Debug.txt MODE=$00CA0002 SECS=3 VOL=20 LOOP
-Echo >>RAM:CA0106-Debug.txt "*N=== ahitest HiFi 24 bit 96 kHz"
-Tools/ahitest >>RAM:CA0106-Debug.txt MODE=$00CA0004 SECS=3 VOL=20 LOOP MIXFREQ=96000
+Echo >>{LOG} "*N=== ahitest 16 bit 48 kHz, after init"
+Tools/ahitest >>{LOG} MODE=$00CA0002 SECS=3 VOL=20 LOOP
+Echo >>{LOG} "(rc=$RC)"
+Echo >>{LOG} "*N=== ahitest HiFi 24 bit 96 kHz"
+Tools/ahitest >>{LOG} MODE=$00CA0004 SECS=3 VOL=20 LOOP MIXFREQ=96000
+Echo >>{LOG} "(rc=$RC)"
 
-Echo >>RAM:CA0106-Debug.txt "*N=== end"
-Echo "Done. Please send RAM:CA0106-Debug.txt"
+Echo "Checking the playback data path without AHI (digital loopback)..."
+Echo >>{LOG} "*N=== catone VERIFY (card plays DMA memory, records its own mixer)"
+Tools/catone >>{LOG} SECS=1 VOL=30 VERIFY
+Echo >>{LOG} "(rc=$RC)"
+Tools/catone >>{LOG} SECS=1 VOL=30 VERIFY S32
+Echo >>{LOG} "(rc=$RC)"
+
+Echo "*NListening test: speakers on the GREEN (front) jack, please."
+Echo "A 1 kHz tone plays for 4 seconds."
+Echo >>{LOG} "*N=== listening test, default GPIO"
+Tools/catone >>{LOG} SECS=4 VOL=50
+Ask "Did you hear the tone? (y/n)"
+If WARN
+  Echo >>{LOG} "user: tone HEARD (default GPIO)"
+Else
+  Echo >>{LOG} "user: NO tone (default GPIO)"
+  Echo "Trying another output routing (GPIO $005f03a3)..."
+  Echo >>{LOG} "*N=== listening test, GPIO $005f03a3"
+  Tools/catone >>{LOG} SECS=4 VOL=50 GPIO=005f03a3
+  Ask "Did you hear the tone this time? (y/n)"
+  If WARN
+    Echo >>{LOG} "user: tone HEARD (GPIO $005f03a3)"
+  Else
+    Echo >>{LOG} "user: NO tone (GPIO $005f03a3)"
+  EndIf
+  C/cactl >NIL: INIT
+EndIf
+
+Echo "A 1 kHz tone plays for 3 seconds through AHI."
+Echo >>{LOG} "*N=== listening test through AHI"
+Tools/ahitest >>{LOG} MODE=$00CA0002 SECS=3 VOL=40 LOOP
+Echo >>{LOG} "(rc=$RC)"
+Ask "Did you hear the tone? (y/n)"
+If WARN
+  Echo >>{LOG} "user: AHI tone HEARD"
+Else
+  Echo >>{LOG} "user: NO AHI tone"
+EndIf
+
+Echo >>{LOG} "*N=== end"
+Echo "Done. Please send {LOG}"
